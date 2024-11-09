@@ -215,7 +215,7 @@ public class IpLoggerCommands {
 
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        System.out.println("[IpLogger] Reading line: " + line);
+                        //System.out.println("[IpLogger] Reading line: " + line);
                         processLogLine(line, database, logDate);  // Pass log date to construct full timestamp
                     }
 

@@ -12,8 +12,19 @@ import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Style;
 import net.minecraft.util.Formatting;
-
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.*;
+import java.nio.file.*;
+import java.util.zip.GZIPInputStream;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class IpLoggerCommands {
@@ -49,7 +60,15 @@ public class IpLoggerCommands {
                                         .executes(context -> removeIpFromUserCommand(context, database))
                                 )
                         )
+                )            .then(CommandManager.literal("buildFromPastLogs")
+                        .executes(context -> buildFromPastLogsCommand(context, database))
                 )
+                .then(CommandManager.literal("geolocate")
+                        .then(CommandManager.argument("ipAddress", StringArgumentType.word())
+                                .executes(context -> geolocateCommand(context))
+                        )
+                )
+
         );
     }
 
@@ -168,4 +187,120 @@ public class IpLoggerCommands {
         }
         return 1;
     }
+
+    private static int buildFromPastLogsCommand(CommandContext<ServerCommandSource> context, PlayerDatabase database) {
+        try {
+            Path logsPath = Paths.get("logs");
+
+            if (!Files.exists(logsPath)) {
+                context.getSource().sendFeedback(() -> Text.literal("[IpLogger] No logs directory found.").setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
+                return 1;
+            }
+
+            List<Path> logFiles = Files.walk(logsPath)
+                    .filter(path -> path.toString().endsWith(".log.gz"))
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            System.out.println("[IpLogger] Found " + logFiles.size() + " log files to process.");
+
+            for (Path logFile : logFiles) {
+                System.out.println("[IpLogger] Processing file: " + logFile);
+
+                // Extract the date from the filename, e.g., "2024-08-23" from "2024-08-23-1.log.gz"
+                String logDate = logFile.getFileName().toString().substring(0, 10);
+
+                try (GZIPInputStream gzipIn = new GZIPInputStream(new FileInputStream(logFile.toFile()));
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(gzipIn))) {
+
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        System.out.println("[IpLogger] Reading line: " + line);
+                        processLogLine(line, database, logDate);  // Pass log date to construct full timestamp
+                    }
+
+                } catch (IOException e) {
+                    System.out.println("[IpLogger] Error reading log file: " + logFile);
+                    e.printStackTrace();
+                }
+            }
+
+            database.saveToJson();
+            context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Completed building data from past logs.").setStyle(Style.EMPTY.withColor(Formatting.AQUA)), false);
+            System.out.println("[IpLogger] JSON database updated and saved.");
+
+        } catch (IOException e) {
+            context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Error accessing logs directory.").setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
+            e.printStackTrace();
+        }
+
+        return 1;
+    }
+
+
+    private static void processLogLine(String line, PlayerDatabase database, String logDate) {
+        // Update the regex to match the new log format
+        String loginPattern = "\\[(?<time>\\d{2}:\\d{2}:\\d{2})\\] \\[Server thread/INFO\\]: (?<username>\\S+)\\[/((?<ipAddress>\\d+\\.\\d+\\.\\d+\\.\\d+):\\d+)\\] logged in with entity id";
+        Pattern pattern = Pattern.compile(loginPattern);
+        Matcher matcher = pattern.matcher(line);
+
+        if (matcher.find()) {
+            // Construct the full timestamp from log date and extracted time
+            String time = matcher.group("time");
+            String timestampStr = logDate + " " + time;
+            String username = matcher.group("username");
+            String ipAddress = matcher.group("ipAddress");
+
+            System.out.println("[IpLogger] Found login entry - Username: " + username + ", IP: " + ipAddress + ", Timestamp: " + timestampStr);
+
+            // Check for duplicates and only add if it's a new or earlier occurrence
+            String existingTimestamp = database.getTimestampForUserIp(username, ipAddress);
+            if (existingTimestamp == null || LocalDateTime.parse(existingTimestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).isAfter(LocalDateTime.parse(timestampStr, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))) {
+                database.addOrUpdateIpEntry(username, ipAddress, timestampStr);
+                System.out.println("[IpLogger] Updated entry for " + username + " with IP " + ipAddress + " at " + timestampStr);
+            } else {
+                System.out.println("[IpLogger] Skipped duplicate or later entry for " + username + " with IP " + ipAddress);
+            }
+        }
+    }
+
+    private static int geolocateCommand(CommandContext<ServerCommandSource> context) {
+        String ipAddress = StringArgumentType.getString(context, "ipAddress");
+
+        try {
+            // Query the new IP location API
+            String apiUrl = "https://api.iplocation.net/?ip=" + ipAddress;
+            HttpURLConnection connection = (HttpURLConnection) new URL(apiUrl).openConnection();
+            connection.setRequestMethod("GET");
+
+            if (connection.getResponseCode() == 200) { // OK
+                InputStreamReader reader = new InputStreamReader(connection.getInputStream());
+                JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
+
+                // Check the response_code to ensure successful lookup
+                if (json.has("response_code") && json.get("response_code").getAsString().equals("200")) {
+                    // Extract country name
+                    String country = json.has("country_name") ? json.get("country_name").getAsString() : "Unknown country";
+
+                    context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Location for IP " + ipAddress + ": " + country)
+                            .setStyle(Style.EMPTY.withColor(Formatting.AQUA)), false);
+                } else {
+                    // Handle failed lookups with response_message
+                    String message = json.has("response_message") ? json.get("response_message").getAsString() : "Unknown error";
+                    context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Failed to locate IP: " + message)
+                            .setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
+                }
+            } else {
+                context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Failed to connect to IP geolocation service.")
+                        .setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
+            }
+        } catch (Exception e) {
+            context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Error occurred while fetching location.")
+                    .setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
+            e.printStackTrace();
+        }
+
+        return 1;
+    }
+
 }

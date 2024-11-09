@@ -111,10 +111,21 @@ public class PlayerDatabase {
         return false;
     }
 
-    // Utility method to get a timestamp for a user-IP pair
+    // Retrieves the timestamp for a specific user-IP combination
     public String getTimestampForUserIp(String username, String ipAddress) {
         PlayerInfo player = players.get(username);
-        return player != null ? player.getIpTimestamps().get(ipAddress) : null;
+        return (player != null) ? player.getIpTimestamps().get(ipAddress) : null;
+    }
+
+    // Adds or updates an IP entry with a given timestamp if it's the first or earliest occurrence
+    public void addOrUpdateIpEntry(String username, String ipAddress, String timestamp) {
+        PlayerInfo player = players.computeIfAbsent(username, k -> new PlayerInfo());
+        String existingTimestamp = player.getIpTimestamps().get(ipAddress);
+
+        // Update only if it's the first or earlier timestamp
+        if (existingTimestamp == null || LocalDateTime.parse(existingTimestamp).isAfter(LocalDateTime.parse(timestamp))) {
+            player.getIpTimestamps().put(ipAddress, timestamp);
+        }
     }
 
     // Inner PlayerInfo class

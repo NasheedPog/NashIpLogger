@@ -4,14 +4,13 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
-import net.nasheedpog.iplogger.IpLoggerCommands;
 
 public class IpLogger implements ModInitializer {
 	private static final PlayerDatabase playerDatabase = new PlayerDatabase();
 
 	@Override
 	public void onInitialize() {
-		System.out.println("IpLogger Mod is initializing!");
+		System.out.println("[IpLogger] Mod is initializing!");
 
 		// Load player data from JSON
 		playerDatabase.loadFromJson();

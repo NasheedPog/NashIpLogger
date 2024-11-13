@@ -251,15 +251,15 @@ public class IpLoggerCommands {
             String username = matcher.group("username");
             String ipAddress = matcher.group("ipAddress");
 
-            System.out.println("[IpLogger] Found login entry - Username: " + username + ", IP: " + ipAddress + ", Timestamp: " + timestampStr);
+            //System.out.println("[IpLogger] Found login entry - Username: " + username + ", IP: " + ipAddress + ", Timestamp: " + timestampStr);
 
             // Check for duplicates and only add if it's a new or earlier occurrence
             String existingTimestamp = database.getTimestampForUserIp(username, ipAddress);
             if (existingTimestamp == null || LocalDateTime.parse(existingTimestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).isAfter(LocalDateTime.parse(timestampStr, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))) {
                 database.addOrUpdateIpEntry(username, ipAddress, timestampStr);
-                System.out.println("[IpLogger] Updated entry for " + username + " with IP " + ipAddress + " at " + timestampStr);
+                //System.out.println("[IpLogger] Updated entry for " + username + " with IP " + ipAddress + " at " + timestampStr);
             } else {
-                System.out.println("[IpLogger] Skipped duplicate or later entry for " + username + " with IP " + ipAddress);
+                //System.out.println("[IpLogger] Skipped duplicate or later entry for " + username + " with IP " + ipAddress);
             }
         }
     }

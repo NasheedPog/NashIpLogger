@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"id": "nashiplogger",
-	"version": "02.00",
+	"version": "02.01",
 	"name": "NashIpLogger",
 	"description": "Keeps track of everyones IPs",
 	"authors": [

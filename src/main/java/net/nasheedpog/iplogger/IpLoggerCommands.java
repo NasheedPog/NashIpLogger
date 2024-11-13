@@ -205,7 +205,7 @@ public class IpLoggerCommands {
             System.out.println("[IpLogger] Found " + logFiles.size() + " log files to process.");
 
             for (Path logFile : logFiles) {
-                System.out.println("[IpLogger] Processing file: " + logFile);
+                //System.out.println("[IpLogger] Processing file: " + logFile);
 
                 // Extract the date from the filename, e.g., "2024-08-23" from "2024-08-23-1.log.gz"
                 String logDate = logFile.getFileName().toString().substring(0, 10);

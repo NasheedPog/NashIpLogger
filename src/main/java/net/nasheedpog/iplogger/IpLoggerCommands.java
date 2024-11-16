@@ -56,7 +56,7 @@ public class IpLoggerCommands {
                         .then(CommandManager.argument("username", StringArgumentType.word())
                                 .suggests((context, builder) -> CommandSource.suggestMatching(database.getUsernames(), builder))
                                 .then(CommandManager.argument("ipAddress", StringArgumentType.word())
-                                        .suggests((context, builder) -> CommandSource.suggestMatching(database.getIpAddressesForUser(StringArgumentType.getString(context, "username")).keySet(), builder))
+                                        .suggests((context, builder) -> CommandSource.suggestMatching(database.getIpAddressesForUser(StringArgumentType.getString(context, "username")), builder))
                                         .executes(context -> removeIpFromUserCommand(context, database))
                                 )
                         )
@@ -74,9 +74,9 @@ public class IpLoggerCommands {
 
     private static int getIPsCommand(CommandContext<ServerCommandSource> context, PlayerDatabase database) {
         String username = StringArgumentType.getString(context, "username");
-        Map<String, String> ipTimestamps = database.getIpAddressesForUser(username);
+        List<PlayerDatabase.IpEntry> ipEntries = database.getEntries(username);
 
-        if (ipTimestamps == null) {
+        if (ipEntries == null) {
             context.getSource().sendFeedback(() -> Text.literal("[IpLogger] User not found.")
                     .setStyle(Style.EMPTY.withColor(Formatting.AQUA)), false);
             return 1;
@@ -85,12 +85,12 @@ public class IpLoggerCommands {
         context.getSource().sendFeedback(() -> Text.literal("[IpLogger] IP addresses first seen for ")
                 .setStyle(Style.EMPTY.withColor(Formatting.AQUA))
                 .append(Text.literal(username).setStyle(Style.EMPTY.withColor(Formatting.YELLOW))), false);
-        ipTimestamps.forEach((ip, timestamp) -> {
+        ipEntries.forEach(entry -> {
             context.getSource().sendFeedback(() -> Text.literal("- ")
-                    .append(Text.literal(ip).setStyle(Style.EMPTY.withColor(Formatting.BLUE)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, ip))
+                    .append(Text.literal(entry.getIp()).setStyle(Style.EMPTY.withColor(Formatting.BLUE)
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, entry.getIp()))
                             .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to copy IP")))))
-                    .append(Text.literal(" (First seen: " + timestamp + ")")), false);
+                    .append(Text.literal(" Location: "+ entry.getLocation() +" (First seen: " + entry.getTimestamp() + ")")), false);
         });
         return 1;
     }
@@ -108,17 +108,17 @@ public class IpLoggerCommands {
                 .setStyle(Style.EMPTY.withColor(Formatting.AQUA)), false);
 
         duplicateIps.forEach((ip, users) -> {
-            Text ipText = Text.literal("- ").append(Text.literal(ip)
+            Text ipText = Text.literal("- ").append(Text.literal(ip+" ")
                     .setStyle(Style.EMPTY.withColor(Formatting.BLUE)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, ip))
-                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to copy IP")))));
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, ip+ " "))
+                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to copy IP\n"+database.getLocation(ip))))));
 
             List<Text> userTextComponents = new ArrayList<>();
             for (String user : users) {
                 Text userText = Text.literal(user)
                         .setStyle(Style.EMPTY.withColor(Formatting.YELLOW)
                                 .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, user))
-                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("First seen: " + database.getTimestampForUserIp(user, ip)))));
+                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to copy.\nFirst seen: " + database.getTimestampForUserIp(user, ip)))));
                 userTextComponents.add(userText);
                 userTextComponents.add(Text.literal(", "));
             }
@@ -153,7 +153,8 @@ public class IpLoggerCommands {
                 .setStyle(Style.EMPTY.withColor(Formatting.AQUA))
                 .append(Text.literal(ipAddress).setStyle(Style.EMPTY.withColor(Formatting.BLUE)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, ipAddress))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to copy IP"))))), false);
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to copy IP")))))
+                .append(Text.literal(" ("+database.getLocation(ipAddress)+")").setStyle(Style.EMPTY.withColor(Formatting.WHITE))), false);
 
         users.forEach(user -> {
             String timestamp = database.getTimestampForUserIp(user, ipAddress);
@@ -264,9 +265,7 @@ public class IpLoggerCommands {
         }
     }
 
-    private static int geolocateCommand(CommandContext<ServerCommandSource> context) {
-        String ipAddress = StringArgumentType.getString(context, "ipAddress");
-
+    public static String geolocate(String ipAddress){
         try {
             // Query the new IP location API
             String apiUrl = "https://api.iplocation.net/?ip=" + ipAddress;
@@ -280,26 +279,29 @@ public class IpLoggerCommands {
                 // Check the response_code to ensure successful lookup
                 if (json.has("response_code") && json.get("response_code").getAsString().equals("200")) {
                     // Extract country name
-                    String country = json.has("country_name") ? json.get("country_name").getAsString() : "Unknown country";
-
-                    context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Location for IP " + ipAddress + ": " + country)
-                            .setStyle(Style.EMPTY.withColor(Formatting.AQUA)), false);
+                    return json.has("country_name") ? json.get("country_name").getAsString() : "Unknown country";
                 } else {
                     // Handle failed lookups with response_message
                     String message = json.has("response_message") ? json.get("response_message").getAsString() : "Unknown error";
-                    context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Failed to locate IP: " + message)
-                            .setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
+                    System.out.println("[IpLogger] Error occurred while fetching location: "+message);
+                    return "";
                 }
-            } else {
-                context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Failed to connect to IP geolocation service.")
-                        .setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
             }
         } catch (Exception e) {
-            context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Error occurred while fetching location.")
-                    .setStyle(Style.EMPTY.withColor(Formatting.RED)), false);
+            System.out.println("[IpLogger] Error occurred while fetching location.");
             e.printStackTrace();
         }
 
+        return "";
+    }
+
+    private static int geolocateCommand(CommandContext<ServerCommandSource> context) {
+        String ipAddress = StringArgumentType.getString(context, "ipAddress");
+        String location = geolocate(ipAddress);
+        if (!Objects.equals(location, "")){
+            context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Location for IP " + ipAddress + ": " + location)
+                    .setStyle(Style.EMPTY.withColor(Formatting.AQUA)), false);
+        }
         return 1;
     }
 

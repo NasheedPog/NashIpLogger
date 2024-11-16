@@ -4,6 +4,9 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
+import net.nasheedpog.iplogger.IpLoggerCommands;
+
+import static net.nasheedpog.iplogger.IpLoggerCommands.geolocate;
 
 public class IpLogger implements ModInitializer {
 	private static final PlayerDatabase playerDatabase = new PlayerDatabase();
@@ -22,7 +25,8 @@ public class IpLogger implements ModInitializer {
 		ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
 			String username = handler.getPlayer().getName().getString();
 			String ipAddress = getIpAddress(handler);
-			playerDatabase.trackPlayer(username, ipAddress);
+			String location = geolocate(ipAddress);
+			playerDatabase.trackPlayer(username, ipAddress, location);
 		});
 
 		// Register server stop event to save data

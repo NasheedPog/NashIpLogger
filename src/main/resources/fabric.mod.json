@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
-	"id": "nashiplogger",
-	"version": "03.00",
-	"name": "NashIpLogger",
+	"id": "iplogger",
+	"version": "03.01",
+	"name": "IpLogger",
 	"description": "Keeps track of everyones IPs",
 	"authors": [
 		"NasheedPog"
@@ -11,9 +11,9 @@
 		"homepage": "https://fabricmc.net/",
 		"sources": "https://github.com/FabricMC/fabric-example-mod"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/nashiplogger/icon.png",
-	"environment": "*",
+	"environment": "server",
 	"entrypoints": {
 		"main": [
 			"net.nasheedpog.iplogger.IpLogger"
@@ -23,7 +23,7 @@
 		"nashiplogger.mixins.json"
 	],
 	"depends": {
-		"fabricloader": ">=0.16.2",
+		"fabricloader": "*",
 		"minecraft": "~1.21.1",
 		"java": ">=21",
 		"fabric-api": "*"

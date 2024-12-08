@@ -27,6 +27,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static net.nasheedpog.iplogger.IpLogger.debugMode;
+
 public class IpLoggerCommands {
 
     public static void registerCommands(IpLogger modInstance, PlayerDatabase database) {
@@ -60,7 +62,8 @@ public class IpLoggerCommands {
                                         .executes(context -> removeIpFromUserCommand(context, database))
                                 )
                         )
-                )            .then(CommandManager.literal("buildFromPastLogs")
+                )
+                .then(CommandManager.literal("buildFromPastLogs")
                         .executes(context -> buildFromPastLogsCommand(context, database))
                 )
                 .then(CommandManager.literal("geolocate")
@@ -68,7 +71,9 @@ public class IpLoggerCommands {
                                 .executes(context -> geolocateCommand(context))
                         )
                 )
-
+                .then(CommandManager.literal("toggleDebugMode")
+                        .executes(context -> toggleDebugMode(context))
+                )
         );
     }
 
@@ -206,7 +211,7 @@ public class IpLoggerCommands {
             System.out.println("[IpLogger] Found " + logFiles.size() + " log files to process.");
 
             for (Path logFile : logFiles) {
-                //System.out.println("[IpLogger] Processing file: " + logFile);
+                System.out.println("[IpLogger] Processing file: " + logFile);
 
                 // Extract the date from the filename, e.g., "2024-08-23" from "2024-08-23-1.log.gz"
                 String logDate = logFile.getFileName().toString().substring(0, 10);
@@ -252,15 +257,22 @@ public class IpLoggerCommands {
             String username = matcher.group("username");
             String ipAddress = matcher.group("ipAddress");
 
-            //System.out.println("[IpLogger] Found login entry - Username: " + username + ", IP: " + ipAddress + ", Timestamp: " + timestampStr);
+            if (debugMode){
+                System.out.println("[IpLogger_debug] Found login entry - Username: " + username + ", IP: " + ipAddress + ", Timestamp: " + timestampStr);
+            }
 
             // Check for duplicates and only add if it's a new or earlier occurrence
             String existingTimestamp = database.getTimestampForUserIp(username, ipAddress);
             if (existingTimestamp == null || LocalDateTime.parse(existingTimestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).isAfter(LocalDateTime.parse(timestampStr, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))) {
+                // existingTimestamp is null if either the username didn't exist in database, or the ipAddress doesn't exist on that user.
                 database.addOrUpdateIpEntry(username, ipAddress, timestampStr);
-                //System.out.println("[IpLogger] Updated entry for " + username + " with IP " + ipAddress + " at " + timestampStr);
+                if (debugMode){
+                    System.out.println("[IpLogger_debug] Updated entry for " + username + " with IP " + ipAddress + " at " + timestampStr + " (Old time was " + existingTimestamp + ")");
+                }
             } else {
-                //System.out.println("[IpLogger] Skipped duplicate or later entry for " + username + " with IP " + ipAddress);
+                if (debugMode) {
+                    System.out.println("[IpLogger_debug] Skipped duplicate or later entry for " + username + " with IP " + ipAddress);
+                }
             }
         }
     }
@@ -302,6 +314,13 @@ public class IpLoggerCommands {
             context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Location for IP " + ipAddress + ": " + location)
                     .setStyle(Style.EMPTY.withColor(Formatting.AQUA)), false);
         }
+        return 1;
+    }
+
+    private static int toggleDebugMode(CommandContext<ServerCommandSource> context){
+        debugMode = !debugMode;
+        System.out.println("[IpLogger]: Debug mode is set to "+debugMode);
+        context.getSource().sendFeedback(() -> Text.literal("[IpLogger] Debug mode is now set to "+debugMode+" - only affects server console outputs!").setStyle(Style.EMPTY.withColor(Formatting.AQUA)), true);
         return 1;
     }
 

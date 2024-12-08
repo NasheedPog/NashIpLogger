@@ -14,6 +14,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static net.nasheedpog.iplogger.IpLogger.debugMode;
 import static net.nasheedpog.iplogger.IpLoggerCommands.geolocate;
 
 public class PlayerDatabase {
@@ -266,7 +267,14 @@ public class PlayerDatabase {
         List<IpEntry> ipEntries = players.get(username);
 
         if (ipEntries == null) {
-            return; // user didn't exist
+            // if ipEntries is null, then the player doesn't exist from before. Make a new entry in the database.
+            // calling the trackPlayer function will just make a new player&ipEntry, but the timestamp will be set to now().
+            // Continuing on afterwards, this timestamp will be caught as not the most recent, and be updated to "timestamp"
+            if (debugMode){
+                System.out.println("[IpLogger_debug]: Player "+username+" didn't exist from before -> Adding to database");
+            }
+            trackPlayer(username,ipAddress,geolocate(ipAddress)); // make new player in database (timestamp = now())
+            ipEntries = players.get(username); // refresh content of ipEntries, which now contains info that we made in the command directly above
         }
 
         String existingTimestamp = null;
@@ -274,22 +282,42 @@ public class PlayerDatabase {
             if (ipEntry.getIp().equals(ipAddress)) {
                 existingTimestamp = ipEntry.getTimestamp();
                 // update timestamp if new input time is earlier than previous time
-                if (LocalDateTime.parse(existingTimestamp).isAfter(LocalDateTime.parse(timestamp))){
+                if (debugMode) {
+                    System.out.println("[IpLogger_debug]: Updating entry for " + username + ". Old timestamp was " + existingTimestamp + ", new timestamp is " + timestamp + ".");
+                }
+                if (LocalDateTime.parse(existingTimestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).isAfter(LocalDateTime.parse(timestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))){
                     ipEntry.setTimestamp(timestamp);
-
                 }
             }
         }
 
         // If existingTimestamp is still null, then the ip didn't exist for that player, so add a new one
         if (existingTimestamp == null ) {
+            if (debugMode){
+                System.out.println("[IpLogger_debug]: The ip "+ipAddress+" didn't exist for "+username+", so adding it to the user.");
+            }
             ipEntries.add(new IpEntry(ipAddress, timestamp, geolocate(ipAddress)));
         }
-
         ipEntries.sort(Comparator.comparing(IpEntry::getTimestamp)); // sort ipEntries to be in chronological order
         players.put(username, ipEntries);
         saveToJson();
 
+        // The database should now have been updated with new entry-info, or new info added. Adding a check (for debug purposes) to see if it was successfully added.
+        if (debugMode){
+            ipEntries = players.get(username);
+            existingTimestamp = null;
+            for (IpEntry ipEntry : ipEntries) {
+                if (ipEntry.getIp().equals(ipAddress)) {
+                    existingTimestamp = ipEntry.getTimestamp();
+                    if (LocalDateTime.parse(existingTimestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).isEqual(LocalDateTime.parse(timestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))){
+                        System.out.println("[IpLogger_debug]: Update successful");
+                    }
+                }
+            }
+            if (existingTimestamp==null){
+                System.out.println("[IpLogger_debug]: Update failed (timestamp is still null!)");
+            }
+        }
     }
 
     public List<IpEntry> getEntries(String username) {

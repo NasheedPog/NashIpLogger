@@ -10,6 +10,7 @@ import static net.nasheedpog.iplogger.IpLoggerCommands.geolocate;
 
 public class IpLogger implements ModInitializer {
 	private static final PlayerDatabase playerDatabase = new PlayerDatabase();
+	public static boolean debugMode = false;
 
 	@Override
 	public void onInitialize() {
